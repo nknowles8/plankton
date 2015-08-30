@@ -10,8 +10,66 @@ from pylab import cm
 from skimage import morphology, measure
 
 
-DIR = "data/train/"
+def get_stats():
+    dir_names = glob.glob(os.path.join("data", "train", "*"))
+    total_files = 0
+    total_width = 0
+    total_height = 0
+    max_width = 0
+    max_height = 0
+    max_width_file = None
+    max_height_file = None
+    for dir in dir_names:
+        y_class = dir.split("/")[-1]
+        files = glob.glob(os.path.join(dir, "*.jpg"))
+        num_files = len(files)
+        print "{0}: {1}".format(y_class, num_files)
+        total_files += num_files
+        for file in files:
+            image = imread(file, as_grey=True)
+            width, height = image.shape
+            total_width += width
+            total_height += height
+            if width > max_width:
+                max_width = width
+                max_width_file = file
+            if height > max_height:
+                max_height = height
+                max_height_file = file
+    print "total: {}".format(total_files)
+    print "largest size: {0}, {1}".format(max_width, max_height)
+    print "avg size: {0}, {1}".format(total_width/total_files, total_height/total_files)
+    print "max width file: {}".format(max_width_file)
+    print "max height file: {}".format(max_height_file)
 
+
+def load_data(image_size=25):
+    dir_names = glob.glob(os.path.join("data", "train", "*"))
+    num_rows = len(glob.glob(os.path.join("data", "train", "*", "*.jpg")))
+    num_pixels = image_size * image_size
+    num_features = num_pixels
+    X = np.zeros((num_rows, num_features))
+    y = np.zeros((num_rows))
+
+    i = 0
+    label = 0
+    target_classes = []
+
+    print "Reading images"
+    for dir in dir_names:
+        current_class = dir.split("/")[-1]
+        target_classes.append(current_class)
+        files = glob.glob(os.path.join(dir, "*.jpg"))
+        for file in files:
+            image = imread(file, as_grey=True)
+            image = resize(image, (image_size, image_size))
+            X[i, 0:num_pixels] = np.reshape(image, (1, num_pixels))
+            y[i] = label
+            i += 1
+            report_prog = [int((j + 1)*num_rows/20.) for j in range(20)]
+            if i in report_prog: print np.ceil(i * 100.0/num_rows), "% done"
+        label += 1
+    return X, y
 
 def threshold_image(im):
     """
@@ -47,14 +105,5 @@ def segment_image(im):
     return labels
 
 
-def test():
-    dir_names = glob.glob(os.path.join("data", "train", "*"))
-    ex_file = glob.glob(os.path.join(dir_names[5], "*.jpg"))[5]
-    print ex_file
-    im = imread(ex_file, as_grey=True)
-    labels = segment_image(im)
-    regions = measure.regionprops(labels)
-    print type(regions)
-
 if __name__ == "__main__":
-    test()
+    load_data()
