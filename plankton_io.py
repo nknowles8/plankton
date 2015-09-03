@@ -3,6 +3,9 @@ __author__ = 'Sachith Thomas and Nick Knowles'
 import numpy as np
 import glob
 import os
+import gzip
+import pickle
+import random
 from skimage.io import imread
 from skimage.transform import resize
 from matplotlib import pyplot as plt
@@ -43,16 +46,20 @@ def get_stats():
     print "max height file: {}".format(max_height_file)
 
 
-def load_data(image_size=25):
+def load_data(image_size=25, segment_stats=False):
     """
     iterates through the folder structure, adding pixels and labels to X and y numpy arrays
     :param image_size: image size after resize
     :return: two numpy arrays, X containing pixels and maybe other stuff, y contains labels
     """
     dir_names = glob.glob(os.path.join("data", "train", "*"))
+
     num_rows = len(glob.glob(os.path.join("data", "train", "*", "*.jpg")))
     num_pixels = image_size * image_size
-    num_features = num_pixels + 4
+    num_features = num_pixels
+    if segment_stats:
+        num_features += 4
+
     X = np.zeros((num_rows, num_features))
     y = np.zeros((num_rows))
 
@@ -69,8 +76,9 @@ def load_data(image_size=25):
             image = imread(filename, as_grey=True)
             image = resize(image, (image_size, image_size))
             X[i, 0:num_pixels] = np.reshape(image, (1, num_pixels))
-            segment_stats = get_largest_segment_summary_stats(image)
-            X[i, -4:] = np.array(segment_stats)
+            if segment_stats:
+                segment_stats = get_largest_segment_summary_stats(image)
+                X[i, -4:] = np.array(segment_stats)
             y[i] = label
             i += 1
             report_prog = [int((j + 1)*num_rows/20.) for j in range(20)]
@@ -145,5 +153,54 @@ def get_largest_segment_summary_stats(image):
         return 0, 0, 0, 0
 
 
+def split_data(data, proportions):
+    """
+    split data into training, validation, and test sets
+    :param data: data in the form of X, y where X and y are numpy arrays assumed to have the same number of rows
+    :param proportions: a list of three numbers describing the desired proportion of each set i.e. [0.7, 0.15, 0.15]
+    :return: a list of datasets in the form [(train_X, train_y), (valid_X, valid_y), (test_X, test_y)]
+    """
+    proportions = proportions[0:3]
+    sum_proportions = sum(proportions)
+    proportions = [x/sum_proportions for x in proportions]
+
+    X, y = data
+    num_rows, num_cols = X.shape
+    rows = range(num_rows)
+    random.shuffle(rows)
+
+    first_split = int(round(num_rows * proportions[0]))
+    second_split = first_split + int(round(num_rows * proportions[1]))
+
+    training_set_rows = rows[1:first_split]
+    valid_set_rows = rows[first_split:second_split]
+    test_set_rows = rows[second_split:]
+
+    train_set = (X[training_set_rows], y[training_set_rows])
+    valid_set = (X[valid_set_rows], y[valid_set_rows])
+    test_set = (X[test_set_rows], y[test_set_rows])
+
+    return [train_set, valid_set, test_set]
+
+
+def pickle_and_save_datasets(datasets, filename='plankton_data'):
+    """
+    pickle and save datasets as .gz
+    :param datasets: a list of datasets in the form [(train_X, train_y), (valid_X, valid_y), (test_X, test_y)]
+    :param filename: string describing desired filename -- file will be saved as 'data/filename.pkl.gz'
+    :return: None, will save file in data directory
+    """
+    data_string = pickle.dumps(datasets)
+    with gzip.open('data/{}.pkl.gz'.format(filename), 'wb') as f:
+        f.write(data_string)
+
+
+def main():
+    data = load_data(image_size=28)
+    print 'splitting data...'
+    datasets = split_data(data, [0.7, 0.15, 0.15])
+    print 'saving data'
+    pickle_and_save_datasets(datasets, filename='plankton_data28')
+
 if __name__ == "__main__":
-    X, y = load_data()
+    main()
